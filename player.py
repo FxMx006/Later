@@ -109,11 +109,5 @@ class Player:
     def collect_point(self, board_coordinates):
         board_x, board_y = self.get_position()
 
-        if board_coordinates[board_y][board_x] == 0:
-            board_coordinates[board_y][board_x] = -1
-
-    def collect_point(self, board_coordinates):
-        board_x, board_y = self.get_position()
-
         if board_coordinates[board_y+1][board_x+1] == 0:
             board_coordinates[board_y+1][board_x+1] = 12
