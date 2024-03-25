@@ -28,6 +28,10 @@ board_coordinates = [
 ]
 
 
+
+
+
+
 def draw_map(screen):
     """
     this function draws the blocks for each number, so we have in the end a
