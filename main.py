@@ -2,26 +2,29 @@ import os
 import sys
 import pygame
 
-from map import board_coordinates
-from map import draw_map
+from map import board_coordinates, draw_map
 from player import Player
-from yellow_enemy import Ghost
+from yellow_enemy import YellowEnemy
 
 
 def main():
     pygame.init()
+    clock = pygame.time.Clock()
     screen = pygame.display.set_mode((720, 720))
     pygame.display.set_caption("Pacman")
 
+    # Initialisierung von Player und YellowEnemy (Gegner)
     player = Player('assets/player_images/rechts.png', 'assets/player_images/1.png',
                     'assets/player_images/hoch.png', 'assets/player_images/runter.png',
                     'assets/player_images/2.png',
-                    (30, 30), 0.3, screen)
+                    (30, 30), 1, screen)
 
-    yellow_enemy = Ghost('assets/player_images/orange.png', (278, 278), 0.2, screen)
+    yellow_enemy = YellowEnemy('assets/player_images/orange.png', (278, 278),
+                               screen, board_coordinates)
 
     running = True
     while running:
+        clock.tick(80)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -29,19 +32,25 @@ def main():
                 pygame.quit()
                 os.execv(sys.executable, ['python'] + sys.argv)
 
+        # Spiellogik-Update und Rendering
         if player.check_collision(yellow_enemy):
             print("Game Over")
             break
-        screen.fill((0, 0, 0))
-        draw_map(screen)
 
-        player.draw_player()
-        player.move(board_coordinates)
-        player.collect_point(board_coordinates)
-        yellow_enemy.move(player, board_coordinates)  # Pass both the player object and board_coordinates
-        yellow_enemy.draw_ghost()
+        screen.fill((0, 0, 0))  # Bildschirm leeren
 
-        pygame.display.flip()
+        draw_map(screen)  # Spielfeld zeichnen
+
+        player.draw_player()  # Spieler zeichnen
+        player.move(board_coordinates)  # Siedlerbewegung aktualisieren
+        player.collect_point(board_coordinates)  # Punkte einsammeln
+
+        yellow_enemy.player_pos = player.get_position()  # Aktualisiere die Position des Spielers
+        yellow_enemy.find_shortest_path()  # Berechne den kürzesten Pfad zum Spieler
+        yellow_enemy.move()
+        yellow_enemy.draw_enemy()
+
+        pygame.display.flip()  # Bildschirm aktualisieren
 
     pygame.quit()
 
