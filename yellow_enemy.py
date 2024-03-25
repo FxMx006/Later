@@ -1,72 +1,103 @@
 import pygame
-import random
+import heapq
+
+from player import Player
 
 
-class Ghost:
-    def __init__(self, image_path, start_pos, velocity, screen):
+class YellowEnemy:
+    def __init__(self, image_path, start_pos, screen, board_coordinates):
         self.image = pygame.image.load(image_path)
-        self.start_pos = start_pos
-        self.x = start_pos[0]
-        self.y = start_pos[1]
-        self.rect = pygame.Rect(self.x, self.y, 22, 22)
+        self.rect = self.image.get_rect()
+        self.rect.topleft = start_pos
+        self.start_pos = self.pixel_to_matrix(start_pos)
+        self.player_pos = (0, 0)
         self.screen = screen
-        self.vel = velocity
-        self.directions = ['left', 'right', 'up', 'down']
-        self.direction = random.choice(self.directions)
+        self.board_coordinates = board_coordinates.copy()
+        self.vel = 1  # Geschwindigkeit des Gegners reduziert
+        self.player = Player('assets/player_images/rechts.png', 'assets/player_images/1.png',
+                             'assets/player_images/hoch.png', 'assets/player_images/runter.png',
+                             'assets/player_images/2.png',
+                             (30, 30), 1, screen)
+        self.path = self.find_shortest_path()  # Pfad, den der Gegner entlang laufen wird
+        self.current_step = 0  # Aktueller Schritt im Pfad
 
-    def collision(self, board_coordinates):
-        corners = [(self.x // 30, self.y // 30),
-                   ((self.x + self.rect.width) // 30, self.y // 30),
-                   (self.x // 30, (self.y + self.rect.height) // 30),
-                   ((self.x + self.rect.width) // 30, (self.y + self.rect.height) // 30)]
-        for corner in corners:
-            if board_coordinates[int(corner[1])][int(corner[0])] not in [0, 11, 12]:
-                return True
-        return False
+    def draw_enemy(self):
+        self.screen.blit(self.image, (round(self.rect.x), round(self.rect.y)))
 
-    def move(self, player, board_coordinates):
-        old_x, old_y = self.x, self.y
+    def find_shortest_path(self):
+        player_pos = self.player.get_position()
 
-        best_direction = None
-        best_distance = float('inf')
+        start = self.get_nearest_accessible(self.start_pos)
+        target = self.get_nearest_accessible(player_pos)
+        open_list = []
+        heapq.heappush(open_list, (0, start))
+        came_from = {start: None}
+        cost_so_far = {start: 0}
+        while open_list:
+            _, current = heapq.heappop(open_list)
+            if current == target:
+                break
+            for next in self.get_neighbors(current):
+                new_cost = cost_so_far[current] + 1
+                if next not in cost_so_far or new_cost < cost_so_far[next]:
+                    cost_so_far[next] = new_cost
+                    priority = new_cost + self.heuristic(target, next)
+                    heapq.heappush(open_list, (priority, next))
+                    came_from[next] = current
+        if target in came_from:
+            return self.reconstruct_path(came_from, target)
+        else:
+            return []
 
-        for direction in self.directions:
-            # Versuchen Sie, in diese Richtung zu bewegen
-            if direction == 'left':
-                self.x -= self.vel
-            elif direction == 'right':
-                self.x += self.vel
-            elif direction == 'up':
-                self.y -= self.vel
-            elif direction == 'down':
-                self.y += self.vel
+    def get_neighbors(self, pos):
+        x, y = pos
+        directions = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)]
+        neighbors = [point for point in directions if
+                     0 <= point[0] < len(self.board_coordinates[0]) and 0 <= point[1] < len(self.board_coordinates) and
+                     self.board_coordinates[point[1]][point[0]] in {0, 11, 12}]
+        return neighbors
 
-            # Überprüfen Sie, ob dieser Zug den Geist näher an den Spieler bringt und keinen Zusammenstoß verursacht
-            dx, dy = self.x - player.x, self.y - player.y
-            new_distance = dx ** 2 + dy ** 2
-            if new_distance < best_distance and not self.collision(board_coordinates):
-                best_direction = direction
-                best_distance = new_distance
+    def heuristic(self, a, b):
+        return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-            # Rückgängig machen des Zuges
-            self.x, self.y = old_x, old_y
+    def reconstruct_path(self, came_from, target):
+        path = []
+        current = target
+        while current is not None:
+            path.append(current)
+            current = came_from[current]
+        path.reverse()
+        return path
 
-        # Wenn wir einen guten Zug gefunden haben, machen wir ihn
-        if best_direction is not None:
-            self.direction = best_direction
-            if self.direction == 'left':
-                self.x -= self.vel
-            elif self.direction == 'right':
-                self.x += self.vel
-            elif self.direction == 'up':
-                self.y -= self.vel
-            elif self.direction == 'down':
-                self.y += self.vel
+    def pixel_to_matrix(self, pos):
+        return pos[0] // 30, pos[1] // 30
 
-        self.rect.x, self.rect.y = int(self.x), int(self.y)
+    def matrix_to_pixel(self, pos):
+        return pos[0] * 30, pos[1] * 30
 
-    def draw_ghost(self):
-        ghost_pos = (self.rect.x - self.image.get_width() // 2 + self.rect.width // 2,
-                     self.rect.y - self.image.get_height() // 2 + self.rect.height // 2)
-        self.screen.blit(self.image, ghost_pos)
-        pygame.draw.rect(self.screen, (255, 0, 0), self.rect, 2)
+    def get_nearest_accessible(self, pos):
+        if self.board_coordinates[pos[1]][pos[0]] in {0, 11, 12}:
+            return pos
+        for d in range(1, max(len(self.board_coordinates), len(self.board_coordinates[0]))):
+            for i in range(-d, d + 1):
+                for j in range(-d, d + 1):
+                    x, y = pos[0] + i, pos[1] + j
+                    if 0 <= x < len(self.board_coordinates[0]) and 0 <= y < len(self.board_coordinates) and \
+                            self.board_coordinates[y][x] in {0, 11, 12}:
+                        return x, y
+        return
+
+    def move(self):
+        if self.current_step < len(self.path):
+            next_step = self.path[self.current_step]
+            next_x, next_y = self.matrix_to_pixel(next_step)
+            if self.rect.x < next_x:
+                self.rect.x += self.vel
+            elif self.rect.x > next_x:
+                self.rect.x -= self.vel
+            if self.rect.y < next_y:
+                self.rect.y += self.vel
+            elif self.rect.y > next_y:
+                self.rect.y -= self.vel
+            if round(self.rect.x) == next_x and round(self.rect.y) == next_y:
+                self.current_step += 1
